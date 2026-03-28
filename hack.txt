@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Adaptive Memory System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;margin:0}
+.page{display:none;max-width:1100px;margin:auto;padding:24px}.show{display:block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{background:#1e293b;padding:20px;border-radius:16px}
+input,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#fff}
+button{padding:10px 16px;border:none;border-radius:10px;background:#10b981;color:#fff;cursor:pointer;margin-top:8px}
+.secondary{background:#475569}.list-item{padding:12px;background:#0f172a;border-radius:10px;margin-top:10px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- Login Page -->
+<div id="loginPage" class="page show">
+  <div class="card" style="max-width:500px;margin:60px auto;">
+    <h1>🔐 Login</h1>
+    <input id="userName" placeholder="Name"><br><br>
+    <input id="userEmail" type="email" placeholder="Email"><br><br>
+    <input id="userPassword" type="password" placeholder="Password"><br><br>
+    <button id="loginBtn">Login</button>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboardPage" class="page">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h1>🧠 Adaptive Memory Dashboard</h1>
+<button onclick="showQuizPage()">📝 Quiz Page</button>
+</div>
+<div class="grid">
+<div class="card">
+<h2>📄 Upload PDF / Text</h2>
+<input type="file" id="fileInput" accept=".pdf,.txt"><br><br>
+<textarea id="manualContent" rows="10" placeholder="Paste content"></textarea>
+<button id="summarizeBtn">✨ Summarize</button>
+</div>
+<div class="card">
+<h2>📝 Summary</h2>
+<div id="summaryOutput">Upload and summarize</div>
+<div id="keyPoints"></div>
+</div>
+<div class="card">
+<h2>📚 Add Lesson Reminder</h2>
+<input id="lessonName" placeholder="Lesson name"><br><br>
+<input id="lessonDuration" type="number" placeholder="Reminder after minutes"><br><br>
+<button id="addLessonBtn">➕ Add</button>
+</div>
+<div class="card">
+<h2>⏰ Scheduled Revisions</h2>
+<div id="lessonsList">No lessons</div>
+</div>
+</div>
+</div>
+
+<!-- Quiz Page -->
+<div id="quizPage" class="page">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h1>📝 Quiz Questions</h1>
+<button onclick="showDashboard()">⬅ Back</button>
+</div>
+<div class="card">
+<button id="generateQuizBtn">🎯 Generate Quiz from Uploaded Content</button>
+<div id="quizOutput"></div>
+</div>
+</div>
+
+<script>
+const loginPage=document.getElementById('loginPage');
+const dashboardPage=document.getElementById('dashboardPage');
+const quizPage=document.getElementById('quizPage');
+const loginBtn=document.getElementById('loginBtn');
+const fileInput=document.getElementById('fileInput');
+const manualContent=document.getElementById('manualContent');
+const summarizeBtn=document.getElementById('summarizeBtn');
+const summaryOutput=document.getElementById('summaryOutput');
+const keyPoints=document.getElementById('keyPoints');
+const lessonName=document.getElementById('lessonName');
+const lessonDuration=document.getElementById('lessonDuration');
+const addLessonBtn=document.getElementById('addLessonBtn');
+const lessonsList=document.getElementById('lessonsList');
+const generateQuizBtn=document.getElementById('generateQuizBtn');
+const quizOutput=document.getElementById('quizOutput');
+
+let lessons=[]; let timers={}; let activeAlarm=null;
+
+loginBtn.onclick=()=>{
+  if(!userName.value || !userEmail.value || !userPassword.value) return alert('Fill all fields');
+  loginPage.classList.remove('show'); dashboardPage.classList.add('show');
+}
+
+window.showQuizPage=()=>{dashboardPage.classList.remove('show'); quizPage.classList.add('show');}
+window.showDashboard=()=>{quizPage.classList.remove('show'); dashboardPage.classList.add('show');}
+
+fileInput.addEventListener('change', async e=>{
+ const file=e.target.files[0]; if(!file) return;
+ if(file.type==='application/pdf'){
+  const buffer=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument(new Uint8Array(buffer)).promise;
+  let text='';
+  for(let i=1;i<=pdf.numPages;i++){
+   const page=await pdf.getPage(i); const content=await page.getTextContent();
+   text += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  manualContent.value=text;
+ } else manualContent.value=await file.text();
+});
+
+summarizeBtn.onclick=()=>{
+ const text=manualContent.value.trim(); if(!text) return;
+ const s=text.split(/[.!?]/).map(x=>x.trim()).filter(Boolean);
+ summaryOutput.innerHTML='<b>Summary:</b><br>'+s.slice(0,3).join('. ')+'.';
+ keyPoints.innerHTML='<h3>Key Points</h3>'+s.slice(0,5).map((x,i)=>`<div class="list-item">${i+1}. ${x}</div>`).join('');
+}
+
+function startAlarm(name){
+ const ctx=new (window.AudioContext||window.webkitAudioContext)();
+ const osc=ctx.createOscillator(); osc.frequency.value=880; osc.connect(ctx.destination); osc.start();
+ activeAlarm={ctx,osc};
+ const stop=confirm('🔔 Time to revise '+name+'\nPress OK to stop alarm');
+ if(stop){ osc.stop(); ctx.close(); activeAlarm=null; }
+}
+
+function renderLessons(){
+ lessonsList.innerHTML=lessons.map(l=>`<div class="list-item"><b>${l.name}</b><br>${l.duration} min
+ <br><button class="secondary" onclick="deleteLesson(${l.id})">🗑 Delete</button></div>`).join('') || 'No lessons';
+}
+
+window.deleteLesson=(id)=>{clearTimeout(timers[id]); lessons=lessons.filter(x=>x.id!==id); renderLessons();}
+
+addLessonBtn.onclick=()=>{
+ const name=lessonName.value.trim(); const duration=parseInt(lessonDuration.value);
+ if(!name||!duration) return alert('Enter lesson and time');
+ const lesson={id:Date.now(),name,duration}; lessons.push(lesson); renderLessons();
+ timers[lesson.id]=setTimeout(()=>startAlarm(lesson.name), duration*60000);
+ lessonName.value=''; lessonDuration.value='';
+}
+
+generateQuizBtn.onclick=()=>{
+ const text=manualContent.value.trim();
+ if(!text) return alert('Upload content first');
+ const lines=text.split(/[.!?]/).map(x=>x.trim()).filter(x=>x.length>20).slice(0,5);
+ quizOutput.innerHTML='<h3>Generated Questions</h3>'+lines.map((l,i)=>`<div class="list-item">Q${i+1}: Explain ${l.split(' ').slice(0,6).join(' ')}?</div>`).join('');
+}
+</script>
+</body>
+</html>
